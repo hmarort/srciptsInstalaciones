@@ -26,16 +26,33 @@ sudo apt install -y nodejs npm
 echo "Instalando Ionic CLI..."
 sudo npm install -g @ionic/cli
 
-# Instalar PgAdmin4 (modo web)
-echo "Instalando PgAdmin4..."
-curl https://www.pgadmin.org/static/packages_pgadmin_org.pub | sudo gpg --dearmor -o /usr/share/keyrings/pgadmin-keyring.gpg
-echo "deb [signed-by=/usr/share/keyrings/pgadmin-keyring.gpg] https://ftp.postgresql.org/pub/pgadmin/pgadmin4/apt/ubuntu $(lsb_release -cs) pgadmin4 main" | sudo tee /etc/apt/sources.list.d/pgadmin4.list
-sudo apt update
-sudo apt install -y pgadmin4-web
+# Instalar PostgreSQL
+echo "Instalando PostgreSQL..."
+sudo apt install -y postgresql postgresql-contrib
+sudo systemctl enable postgresql
+sudo systemctl start postgresql
 
-# Configurar PgAdmin4 en modo web
-echo "Configurando PgAdmin4..."
+# Configurar PostgreSQL para conexiones remotas
+echo "Configurando PostgreSQL..."
+sudo sed -i 's/localhost/\*/g' /etc/postgresql/16/main/postgresql.conf
+echo "host all all all md5" | sudo tee -a /etc/postgresql/16/main/pg_hba.conf
+sudo systemctl restart postgresql
+
+# Abrir el puerto 5432 en el firewall
+echo "Abriendo el puerto 5432..."
+sudo apt install -y ufw
+sudo ufw allow 5432
+
+# Instalar pgAdmin4
+echo "Instalando pgAdmin4..."
+curl -fsS https://www.pgadmin.org/static/packages_pgadmin_org.pub | sudo gpg --dearmor -o /usr/share/keyrings/packages-pgadmin-org.gpg
+sudo sh -c 'echo "deb [signed-by=/usr/share/keyrings/packages-pgadmin-org.gpg] https://ftp.postgresql.org/pub/pgadmin/pgadmin4/apt/$(lsb_release -cs) pgadmin4 main" > /etc/apt/sources.list.d/pgadmin4.list && apt update'
+sudo apt install pgadmin4-web
 sudo /usr/pgadmin4/bin/setup-web.sh
+
+# Configurar PgAdmin4 en modo escritorio
+echo "Configurando PgAdmin4..."
+# No se requiere configuración adicional para el modo escritorio.
 
 # Finalización
 echo "Instalación completada. Asegúrate de configurar Apache y PgAdmin según tus necesidades."
