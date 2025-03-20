@@ -151,7 +151,7 @@ fi
 # Mejorar la detección de dispositivos Android en WSL
 echo "Configurando detección de dispositivos Android en WSL..."
 
-# Añadir configuración específica para WSL
+# Añadir configuración específica para WSL en el .bashrc
 if ! grep -q "ADB_SERVER_SOCKET" ~/.bashrc; then
     echo '# Configuración para ADB en WSL' >> ~/.bashrc
     echo 'export WSL_HOST=$(cat /etc/resolv.conf | grep nameserver | awk "{print \$2}")' >> ~/.bashrc
@@ -166,29 +166,130 @@ if [ ! -f "/etc/udev/rules.d/51-android.rules" ]; then
     chmod a+r /etc/udev/rules.d/51-android.rules
 fi
 
-# Instalar sofw windows/adb bridge para WSL
-echo "Instalando WSL-ADB para mejorar la conectividad..."
-wget -O /usr/local/bin/wsl-adb https://raw.githubusercontent.com/rom1v/wsl-adb/master/wsl-adb.sh
+# Crear nuestro propio script de puente ADB para WSL (ya que el repo original no está disponible)
+echo "Creando script de puente ADB para WSL..."
+cat > /usr/local/bin/wsl-adb << 'EOF'
+#!/bin/bash
+
+# wsl-adb: ADB bridge for WSL
+# Este script facilita la conexión entre ADB en WSL y dispositivos conectados al host Windows
+
+# Obtener la IP del host Windows
+WSL_HOST=$(cat /etc/resolv.conf | grep nameserver | awk '{print $2}')
+
+# Función para mostrar ayuda
+show_help() {
+    echo "wsl-adb: Puente ADB para Windows Subsystem for Linux"
+    echo ""
+    echo "Uso: wsl-adb [comando]"
+    echo ""
+    echo "Comandos:"
+    echo "  setup      Configura el entorno para conectar con ADB en Windows"
+    echo "  connect    Intenta conectar con el servidor ADB en Windows"
+    echo "  devices    Muestra los dispositivos conectados"
+    echo "  help       Muestra esta ayuda"
+    echo ""
+    echo "Para usar dispositivos Android con WSL:"
+    echo "1. En Windows, ejecuta: adb -a -P 5037 nodaemon server"
+    echo "2. En WSL, ejecuta: wsl-adb connect"
+    echo ""
+}
+
+# Función para configurar el entorno
+setup_env() {
+    echo "Configurando entorno ADB para WSL..."
+    export WSL_HOST=$(cat /etc/resolv.conf | grep nameserver | awk '{print $2}')
+    export ADB_SERVER_SOCKET=tcp:$WSL_HOST:5037
+    echo "Variables de entorno configuradas:"
+    echo "  WSL_HOST=$WSL_HOST"
+    echo "  ADB_SERVER_SOCKET=$ADB_SERVER_SOCKET"
+    echo ""
+    echo "Para hacer esta configuración permanente, agregue estas líneas a su ~/.bashrc:"
+    echo "  export WSL_HOST=$(cat /etc/resolv.conf | grep nameserver | awk '{print $2}')"
+    echo "  export ADB_SERVER_SOCKET=tcp:\$WSL_HOST:5037"
+}
+
+# Función para conectar con el servidor ADB en Windows
+connect_adb() {
+    echo "Intentando conectar con el servidor ADB en $WSL_HOST:5037..."
+    export ADB_SERVER_SOCKET=tcp:$WSL_HOST:5037
+    adb kill-server
+    echo "Asegúrese de que el servidor ADB esté ejecutándose en Windows con:"
+    echo "  adb -a -P 5037 nodaemon server"
+    echo ""
+    echo "Intentando listar dispositivos..."
+    adb devices
+}
+
+# Función para mostrar dispositivos
+show_devices() {
+    export ADB_SERVER_SOCKET=tcp:$WSL_HOST:5037
+    echo "Dispositivos conectados a ADB en $WSL_HOST:5037:"
+    adb devices -l
+}
+
+# Procesar argumentos
+case "$1" in
+    setup)
+        setup_env
+        ;;
+    connect)
+        connect_adb
+        ;;
+    devices)
+        show_devices
+        ;;
+    help|--help|-h)
+        show_help
+        ;;
+    *)
+        show_help
+        ;;
+esac
+EOF
+
 chmod +x /usr/local/bin/wsl-adb
 
-# Agregar script de inicialización para adb en WSL
+# Crear script de inicialización para ADB en WSL
 echo "Creando script de inicialización para ADB..."
-echo '#!/bin/bash
+cat > /usr/local/bin/init-adb-wsl << 'EOF'
+#!/bin/bash
+
 echo "Iniciando puente ADB para WSL..."
-HOST_IP=$(cat /etc/resolv.conf | grep nameserver | awk "{print \$2}")
-adb kill-server
+HOST_IP=$(cat /etc/resolv.conf | grep nameserver | awk '{print $2}')
 export ADB_SERVER_SOCKET=tcp:$HOST_IP:5037
-echo "Para conectar dispositivos Android desde Windows, ejecuta:"
-echo "  adb -a -P 5037 nodaemon server"
-echo "Para verificar dispositivos conectados ejecuta:"
-echo "  adb devices"
-' > /usr/local/bin/init-adb-wsl
+adb kill-server
+
+echo "========================================================"
+echo "  CONFIGURACIÓN DE ADB PARA WSL"
+echo "========================================================"
+echo ""
+echo "Para conectar dispositivos Android desde Windows:"
+echo ""
+echo "1. En Windows, ejecuta esta línea en una terminal CMD/PowerShell:"
+echo "   adb -a -P 5037 nodaemon server"
+echo ""
+echo "2. En tu dispositivo Android:"
+echo "   - Activa la Depuración USB en Opciones de desarrollador"
+echo "   - Conecta el dispositivo al PC con USB"
+echo "   - Acepta la solicitud de depuración USB en el dispositivo"
+echo ""
+echo "3. En WSL, verifica la conexión con:"
+echo "   adb devices"
+echo ""
+echo "Variables de entorno configuradas:"
+echo "  ADB_SERVER_SOCKET=tcp:$HOST_IP:5037"
+echo ""
+echo "========================================================"
+EOF
+
 chmod +x /usr/local/bin/init-adb-wsl
 
 # Crear archivo README con instrucciones
 echo "Creando archivo README con instrucciones..."
 mkdir -p /opt/dev-setup
-echo "# Entorno de Desarrollo en WSL
+cat > /opt/dev-setup/README.md << 'EOF'
+# Entorno de Desarrollo en WSL
 
 ## Componentes instalados
 - OpenJDK 17
@@ -206,15 +307,26 @@ Para conectar dispositivos Android desde WSL:
 
 1. En Windows:
    - Asegúrate de tener adb instalado (viene con Android Studio)
-   - Ejecuta en una terminal: \`adb -a -P 5037 nodaemon server\`
+   - Ejecuta en una terminal: `adb -a -P 5037 nodaemon server`
 
 2. En tu dispositivo Android:
    - Activa la depuración USB
    - Conecta el dispositivo a tu PC
 
 3. En WSL:
-   - Ejecuta: \`init-adb-wsl\`
-   - Verifica la conexión: \`adb devices\`
+   - Ejecuta: `init-adb-wsl` o `wsl-adb connect`
+   - Verifica la conexión: `adb devices`
+
+## Herramientas de soporte para WSL-ADB
+El script de instalación ha creado dos herramientas para facilitar la conectividad:
+
+1. `wsl-adb`: Herramienta principal para gestionar la conexión ADB
+   - `wsl-adb setup`: Configura variables de entorno
+   - `wsl-adb connect`: Conecta con el servidor ADB en Windows
+   - `wsl-adb devices`: Muestra dispositivos conectados
+
+2. `init-adb-wsl`: Script de inicialización rápida
+   - Configura todo lo necesario y muestra instrucciones
 
 ## Variables de entorno
 - JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
@@ -222,7 +334,7 @@ Para conectar dispositivos Android desde WSL:
 
 ## Acceso a pgAdmin4
 - URL: http://localhost/pgadmin4
-" > /opt/dev-setup/README.md
+EOF
 
 echo "¡Instalación completada!"
 echo "Para cargar las variables de entorno, ejecuta: source ~/.bashrc"
