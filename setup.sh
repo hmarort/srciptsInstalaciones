@@ -4,6 +4,32 @@
 echo "Actualizando repositorios y paquetes..."
 sudo apt update && sudo apt upgrade -y
 
+# Instalar dependencias para Android Studio
+echo "Instalando dependencias necesarias..."
+sudo apt install -y wget tar unzip lib32z1 openjdk-11-jdk
+
+# Configurar variables de Java
+echo "Configurando variables de entorno Java..."
+export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+echo "export JAVA_HOME=$JAVA_HOME" >> ~/.bashrc
+echo "export PATH=\$PATH:\$JAVA_HOME/bin" >> ~/.bashrc
+
+# Instalar Android Studio
+echo "Descargando Android Studio..."
+cd ~
+wget https://redirector.gvt1.com/edgedl/android/studio/ide-zips/2024.3.1.13/android-studio-2024.3.1.13-linux.tar.gz
+sudo tar -xvzf android-studio-*-linux.tar.gz -C /opt/
+sudo chown -R $USER:$USER /opt/android-studio
+rm android-studio-*-linux.tar.gz
+
+# Configurar variables de Android
+echo "Configurando variables de Android..."
+echo 'export ANDROID_HOME="$HOME/Android/Sdk"' >> ~/.bashrc
+echo 'export PATH="$PATH:$ANDROID_HOME/emulator"' >> ~/.bashrc
+echo 'export PATH="$PATH:$ANDROID_HOME/platform-tools"' >> ~/.bashrc
+echo 'export CAPACITOR_ANDROID_STUDIO_PATH="/opt/android-studio/bin/studio.sh"' >> ~/.bashrc
+source ~/.bashrc
+
 # Instalar Apache2
 echo "Instalando Apache2..."
 sudo apt install -y apache2
@@ -50,9 +76,18 @@ sudo sh -c 'echo "deb [signed-by=/usr/share/keyrings/packages-pgadmin-org.gpg] h
 sudo apt install pgadmin4-web
 sudo /usr/pgadmin4/bin/setup-web.sh
 
-# Configurar PgAdmin4 en modo escritorio
-echo "Configurando PgAdmin4..."
-# No se requiere configuración adicional para el modo escritorio.
+# Configuración para detectar dispositivos Android
+echo "Configurando detección de dispositivos..."
+echo "export ADB_SERVER_SOCKET=tcp:$(cat /etc/resolv.conf | grep nameserver | awk '{print $2}'):5037" >> ~/.bashrc
+source ~/.bashrc
+
+# Instalar platform-tools
+echo "Instalando Android platform-tools..."
+yes | /opt/android-studio/cmdline-tools/latest/bin/sdkmanager --install "platform-tools"
 
 # Finalización
-echo "Instalación completada. Asegúrate de configurar Apache y PgAdmin según tus necesidades."
+echo "Instalación completada!"
+echo "Para detectar dispositivos:"
+echo "1. En Windows: instala ADB y ejecuta 'adb -a -P 5037 nodaemon server'"
+echo "2. Conecta tu dispositivo Android con depuración USB habilitada"
+echo "3. En WSL ejecuta: adb devices"
